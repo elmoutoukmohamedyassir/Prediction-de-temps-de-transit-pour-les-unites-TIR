@@ -1,12 +1,3 @@
-"""
-etl_flow.py
-Pipeline ETL orchestré par Prefect.
-raw_tir_export → clean_tir_export → training_tir_export
-
-Usage :
-    python -m pipeline.etl_flow
-"""
-
 import time
 import pandas as pd
 from prefect import flow, task, get_run_logger

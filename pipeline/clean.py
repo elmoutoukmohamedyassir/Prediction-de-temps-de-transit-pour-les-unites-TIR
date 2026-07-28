@@ -1,9 +1,3 @@
-"""
-clean.py
-Fonctions de nettoyage et transformation du dataset Tanger Med.
-Importé par etl_flow.py — pas un script standalone.
-"""
-
 import pandas as pd
 
 PLACEHOLDERS = {"/", "_", "", "NULL", "null", "NaN"}
