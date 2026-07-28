@@ -10,3 +10,10 @@ __pycache__/
 *.pkl
 
 .vscode/
+# Images EDA
+*.png
+*.jpg
+
+# Features générées
+ml/features/
+*.parquet
