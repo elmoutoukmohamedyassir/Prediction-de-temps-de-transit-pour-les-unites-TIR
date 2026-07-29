@@ -6,6 +6,12 @@ from ingestion.db_config import get_engine
 # 1. CHARGEMENT
 # ══════════════════════════════════════════════════════
 def load_data() -> pd.DataFrame:
+    """
+    Charge les données et impose un ordre chronologique déterministe
+    UNE SEULE FOIS, ici, à la source. Tout le reste du pipeline
+    (features de congestion, split train/test dans train.py) dépend
+    de cet ordre — il ne doit être défini qu'à cet endroit.
+    """
     print("Chargement depuis PostgreSQL...")
     engine = get_engine()
 
@@ -22,6 +28,17 @@ def load_data() -> pd.DataFrame:
         if c in df.columns:
             df[c] = pd.to_datetime(df[c], errors="coerce", utc=True)
 
+    # Tri chronologique déterministe.
+    # PostgreSQL ne garantit AUCUN ordre sans ORDER BY explicite —
+    # sans ce tri, le split train/test "temporel" plus loin dans le
+    # pipeline (iloc[:80%] / iloc[80%:]) ne serait pas vraiment temporel.
+    # Le tie-breaker "_orig_order" rend le tri reproductible même
+    # quand plusieurs camions partagent exactement le même date_zre
+    # (sort_values seul ne garantit pas un ordre stable sur les égalités).
+    df = df.reset_index(drop=True)
+    df["_orig_order"] = df.index
+    df = df.sort_values(["date_zre", "_orig_order"], kind="stable").reset_index(drop=True)
+
     print(f" {len(df):,} lignes chargées")
     return df
 
@@ -35,12 +52,16 @@ def add_congestion_features(df: pd.DataFrame) -> pd.DataFrame:
     ZRE dans les 1h/3h/6h précédentes, dans le MÊME couloir.
     Causal par construction (rolling ne regarde jamais le futur) —
     aucune fuite de données.
+
+    df arrive déjà trié chronologiquement par load_data() (avec
+    _orig_order comme tie-breaker) — on réutilise ce même ordre
+    pour recoller les morceaux après le groupby, afin de ne jamais
+    introduire une deuxième source de non-déterminisme.
     """
-    df = df.sort_values("date_zre").reset_index(drop=True)
     result_parts = []
 
-    for couloir, group in df.groupby("couloir"):
-        g = group.set_index("date_zre").sort_index().copy()
+    for couloir, group in df.groupby("couloir", sort=False):
+        g = group.set_index("date_zre").copy()
         g["_one"] = 1
 
         g["congestion_1h"] = g["_one"].rolling("1h").sum() - 1
@@ -51,7 +72,11 @@ def add_congestion_features(df: pd.DataFrame) -> pd.DataFrame:
         result_parts.append(g)
 
     df_out = pd.concat(result_parts, ignore_index=True)
-    df_out = df_out.sort_values("date_zre").reset_index(drop=True)
+    # Re-tri final avec le même tie-breaker que load_data() —
+    # garantit qu'on retombe exactement sur l'ordre chronologique
+    # défini à la source, peu importe l'ordre de sortie du groupby.
+    df_out = df_out.sort_values(["date_zre", "_orig_order"], kind="stable").reset_index(drop=True)
+    df_out = df_out.drop(columns="_orig_order")
 
     print(" Features de congestion ajoutées (congestion_1h/3h/6h)")
     return df_out
@@ -278,11 +303,11 @@ if __name__ == "__main__":
     print("  FEATURE ENGINEERING — 4 checkpoints")
     print("=" * 55)
 
-    # Charger les données
+    # Charger les données (déjà triées chronologiquement, de façon
+    # déterministe, à l'intérieur de load_data())
     df = load_data()
 
-    # Ajouter les features de congestion AVANT le reste
-    # (nécessite df["couloir"] et df["date_zre"] non encore transformés)
+    # Ajouter les features de congestion
     df = add_congestion_features(df)
 
     # Construire les features par checkpoint
