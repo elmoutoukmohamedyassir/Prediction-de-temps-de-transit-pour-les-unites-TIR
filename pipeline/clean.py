@@ -82,7 +82,7 @@ def build_training_set(df: pd.DataFrame) -> pd.DataFrame:
     ).dt.total_seconds() / 3600
 
     # Filtrer outliers
-    pop = pop[(pop["transit_time_h"] > 0) & (pop["transit_time_h"] < 240)]
+    pop = pop[(pop["transit_time_h"] > 0) & (pop["transit_time_h"] < 72)]
     print(f"Après filtre outliers : {len(pop):,}")
 
     # Supprimer colonnes 100% vides
