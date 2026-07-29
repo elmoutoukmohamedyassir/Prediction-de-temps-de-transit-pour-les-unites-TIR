@@ -8,9 +8,9 @@ from ingestion.db_config import get_engine
 def load_data() -> pd.DataFrame:
     """
     Charge les données et impose un ordre chronologique déterministe
-    UNE SEULE FOIS, ici, à la source. Tout le reste du pipeline
-    (features de congestion, split train/test dans train.py) dépend
-    de cet ordre — il ne doit être défini qu'à cet endroit.
+    UNE SEULE FOIS, ici, à la source. Le split train/test dans train.py
+    (iloc[:80%] / iloc[80%:]) dépend de cet ordre pour être vraiment
+    temporel — il ne doit être défini qu'à cet endroit.
     """
     print("Chargement depuis PostgreSQL...")
     engine = get_engine()
@@ -38,48 +38,10 @@ def load_data() -> pd.DataFrame:
     df = df.reset_index(drop=True)
     df["_orig_order"] = df.index
     df = df.sort_values(["date_zre", "_orig_order"], kind="stable").reset_index(drop=True)
+    df = df.drop(columns="_orig_order")
 
     print(f" {len(df):,} lignes chargées")
     return df
-
-
-# ══════════════════════════════════════════════════════
-# 1bis. FEATURES DE CONGESTION — charge du couloir au moment du ZRE
-# ══════════════════════════════════════════════════════
-def add_congestion_features(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Pour chaque camion, compte combien d'autres camions ont fait leur
-    ZRE dans les 1h/3h/6h précédentes, dans le MÊME couloir.
-    Causal par construction (rolling ne regarde jamais le futur) —
-    aucune fuite de données.
-
-    df arrive déjà trié chronologiquement par load_data() (avec
-    _orig_order comme tie-breaker) — on réutilise ce même ordre
-    pour recoller les morceaux après le groupby, afin de ne jamais
-    introduire une deuxième source de non-déterminisme.
-    """
-    result_parts = []
-
-    for couloir, group in df.groupby("couloir", sort=False):
-        g = group.set_index("date_zre").copy()
-        g["_one"] = 1
-
-        g["congestion_1h"] = g["_one"].rolling("1h").sum() - 1
-        g["congestion_3h"] = g["_one"].rolling("3h").sum() - 1
-        g["congestion_6h"] = g["_one"].rolling("6h").sum() - 1
-
-        g = g.drop(columns="_one").reset_index()
-        result_parts.append(g)
-
-    df_out = pd.concat(result_parts, ignore_index=True)
-    # Re-tri final avec le même tie-breaker que load_data() —
-    # garantit qu'on retombe exactement sur l'ordre chronologique
-    # défini à la source, peu importe l'ordre de sortie du groupby.
-    df_out = df_out.sort_values(["date_zre", "_orig_order"], kind="stable").reset_index(drop=True)
-    df_out = df_out.drop(columns="_orig_order")
-
-    print(" Features de congestion ajoutées (congestion_1h/3h/6h)")
-    return df_out
 
 
 # ══════════════════════════════════════════════════════
@@ -89,6 +51,11 @@ def build_base_features(df: pd.DataFrame) -> pd.DataFrame:
     """
     Features connues au moment où le camion arrive au ZRE.
     Zéro leakage — aucune info sur ce qui va se passer après.
+
+    NOTE : congestion_1h/3h/6h a été testée puis retirée — corrélation
+    quasi nulle avec la cible (0.01 / -0.002 / 0.005) et forte
+    colinéarité entre les 3 colonnes (0.86-0.93), ce qui dégradait
+    les métriques (MAE 6.36h vs 4.64h). Voir diagnostic_congestion.py.
     """
     feat = pd.DataFrame()
 
@@ -102,11 +69,6 @@ def build_base_features(df: pd.DataFrame) -> pd.DataFrame:
     feat["mois_zre"]     = df["date_zre"].dt.month
     feat["est_weekend"]  = (feat["jour_semaine"] >= 5).astype(int)
     feat["est_nuit"]     = ((feat["heure_zre"] >= 22) | (feat["heure_zre"] <= 6)).astype(int)
-
-    # ── Congestion (charge du couloir au moment du ZRE) ──
-    feat["congestion_1h"] = df["congestion_1h"]
-    feat["congestion_3h"] = df["congestion_3h"]
-    feat["congestion_6h"] = df["congestion_6h"]
 
     # ── Couloir (encodage ordinal — ordre = vitesse médiane EDA) ──
     # Couloir 5 (le + rapide) → 1, Couloir 3 (le + lent) → 5
@@ -306,9 +268,6 @@ if __name__ == "__main__":
     # Charger les données (déjà triées chronologiquement, de façon
     # déterministe, à l'intérieur de load_data())
     df = load_data()
-
-    # Ajouter les features de congestion
-    df = add_congestion_features(df)
 
     # Construire les features par checkpoint
     feat_base = build_base_features(df)
