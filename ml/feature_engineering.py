@@ -27,6 +27,37 @@ def load_data() -> pd.DataFrame:
 
 
 # ══════════════════════════════════════════════════════
+# 1bis. FEATURES DE CONGESTION — charge du couloir au moment du ZRE
+# ══════════════════════════════════════════════════════
+def add_congestion_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Pour chaque camion, compte combien d'autres camions ont fait leur
+    ZRE dans les 1h/3h/6h précédentes, dans le MÊME couloir.
+    Causal par construction (rolling ne regarde jamais le futur) —
+    aucune fuite de données.
+    """
+    df = df.sort_values("date_zre").reset_index(drop=True)
+    result_parts = []
+
+    for couloir, group in df.groupby("couloir"):
+        g = group.set_index("date_zre").sort_index().copy()
+        g["_one"] = 1
+
+        g["congestion_1h"] = g["_one"].rolling("1h").sum() - 1
+        g["congestion_3h"] = g["_one"].rolling("3h").sum() - 1
+        g["congestion_6h"] = g["_one"].rolling("6h").sum() - 1
+
+        g = g.drop(columns="_one").reset_index()
+        result_parts.append(g)
+
+    df_out = pd.concat(result_parts, ignore_index=True)
+    df_out = df_out.sort_values("date_zre").reset_index(drop=True)
+
+    print(" Features de congestion ajoutées (congestion_1h/3h/6h)")
+    return df_out
+
+
+# ══════════════════════════════════════════════════════
 # 2. FEATURES DE BASE — disponibles dès le ZRE
 # ══════════════════════════════════════════════════════
 def build_base_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -46,6 +77,11 @@ def build_base_features(df: pd.DataFrame) -> pd.DataFrame:
     feat["mois_zre"]     = df["date_zre"].dt.month
     feat["est_weekend"]  = (feat["jour_semaine"] >= 5).astype(int)
     feat["est_nuit"]     = ((feat["heure_zre"] >= 22) | (feat["heure_zre"] <= 6)).astype(int)
+
+    # ── Congestion (charge du couloir au moment du ZRE) ──
+    feat["congestion_1h"] = df["congestion_1h"]
+    feat["congestion_3h"] = df["congestion_3h"]
+    feat["congestion_6h"] = df["congestion_6h"]
 
     # ── Couloir (encodage ordinal — ordre = vitesse médiane EDA) ──
     # Couloir 5 (le + rapide) → 1, Couloir 3 (le + lent) → 5
@@ -244,6 +280,10 @@ if __name__ == "__main__":
 
     # Charger les données
     df = load_data()
+
+    # Ajouter les features de congestion AVANT le reste
+    # (nécessite df["couloir"] et df["date_zre"] non encore transformés)
+    df = add_congestion_features(df)
 
     # Construire les features par checkpoint
     feat_base = build_base_features(df)
