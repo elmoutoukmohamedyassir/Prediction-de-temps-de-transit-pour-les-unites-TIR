@@ -1,0 +1,22 @@
+artifact_path: file:C:/Users/pc/Prediction-de-temps-de-transit-pour-les-unites-TIR/mlruns/1/models/m-b306455759ce4776a731371104549409/artifacts
+flavors:
+  python_function:
+    data: model.ubj
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.xgboost
+    python_version: 3.14.4
+  xgboost:
+    code: null
+    data: model.ubj
+    model_class: xgboost.sklearn.XGBRegressor
+    model_format: ubj
+    xgb_version: 3.3.0
+mlflow_version: 3.8.1
+model_id: m-b306455759ce4776a731371104549409
+model_size_bytes: 2401428
+model_uuid: m-b306455759ce4776a731371104549409
+prompts: null
+run_id: 036035174c6e4a7ea6c54b33e5d377cd
+utc_time_created: '2026-07-29 09:52:18.613314'

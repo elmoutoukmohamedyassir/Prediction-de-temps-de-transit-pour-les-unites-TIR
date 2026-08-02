@@ -1,0 +1,21 @@
+artifact_path: file:C:/Users/pc/Prediction-de-temps-de-transit-pour-les-unites-TIR/mlruns/1/models/m-4d28e1e016bd467db97a27dcfb5fa1a6/artifacts
+flavors:
+  lightgbm:
+    code: null
+    data: model.pkl
+    lgb_version: 4.7.0
+    model_class: lightgbm.sklearn.LGBMRegressor
+  python_function:
+    data: model.pkl
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.lightgbm
+    python_version: 3.14.4
+mlflow_version: 3.8.1
+model_id: m-4d28e1e016bd467db97a27dcfb5fa1a6
+model_size_bytes: 1503176
+model_uuid: m-4d28e1e016bd467db97a27dcfb5fa1a6
+prompts: null
+run_id: a8edae74e97149dfa4c2080d4eb7d7ab
+utc_time_created: '2026-07-29 10:47:23.726682'
