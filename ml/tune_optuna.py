@@ -144,3 +144,25 @@ if __name__ == "__main__":
 
     print("\n--- Comparaison avec les résultats par défaut (référence) ---")
     print("XGBoost M4_Terminal (défaut) : MAE=6.30h  RMSE=10.24h  MAPE=29.8%")
+
+        # ── Sauvegarde du modèle final tuné ────────────────────
+    import pickle
+
+    MODELS_DIR = "ml/models"
+    os.makedirs(MODELS_DIR, exist_ok=True)
+
+    # On choisit XGBoost tuné comme modèle final (MAE/RMSE légèrement
+    # meilleurs que LightGBM tuné et que XGBoost par défaut — voir
+    # comparaison ci-dessus). Réentraîné sur train+val, jamais sur test.
+    final_model_path = os.path.join(MODELS_DIR, "xgb_M4_Terminal_tuned.pkl")
+    with open(final_model_path, "wb") as f:
+        pickle.dump(best_xgb, f)
+    print(f"\n Modèle final sauvegardé → {final_model_path}")
+
+    # Sauvegarde aussi la liste des features dans le même ordre que
+    # l'entraînement — SHAP et l'API FastAPI en auront besoin plus tard
+    # pour reconstruire X dans le bon ordre de colonnes.
+    feature_cols_path = os.path.join(MODELS_DIR, "xgb_M4_Terminal_tuned_features.pkl")
+    with open(feature_cols_path, "wb") as f:
+        pickle.dump(feature_cols, f)
+    print(f" Liste des features sauvegardée → {feature_cols_path}")
